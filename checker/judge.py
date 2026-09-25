@@ -15,6 +15,12 @@ import anthropic
 from rules import App, Result, is_env_file, redact
 
 MODEL = os.environ.get("JUDGE_MODEL", "claude-opus-5")
+# If the model declines, retry server-side on Anthropic's recommended fallback (newest models only).
+FALLBACK = (
+    {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+    if MODEL.startswith(("claude-opus-5", "claude-fable-5"))
+    else {}
+)
 MAX_PROMPT_CHARS = 400_000  # roughly 100k tokens; files beyond this are listed as not reviewed
 
 # id -> (title shown in the report, question asked to the model)
@@ -110,8 +116,36 @@ def verify(evidence: dict, sent: dict[str, str]) -> str | None:
     return f"{evidence['file']}:{n}  {lines[n - 1].strip()[:100]}"
 
 
+def _parse_json(text: str) -> dict:
+    """Parse the model's JSON answer, tolerating code fences or prose around it.
+
+    The API enforces the schema via output_config, but some API gateways drop
+    that setting, so the schema is also spelled out in the prompt.
+    """
+    start, end = text.find("{"), text.rfind("}")
+    return json.loads(text[start : end + 1] if start != -1 else text)
+
+
+def _to_results(answers: dict, sent: dict[str, str]) -> tuple[list[Result], int]:
+    """Turn the model's answers into Results; returns (results, number of flags discarded)."""
+    results, discarded = [], 0
+    for qid, (title, _) in QUESTIONS.items():
+        answer = answers.get(qid)
+        if answer is None:
+            results.append(Result(qid, title, "SKIP", "the AI judge did not answer this question"))
+        elif answer["verdict"] == "ok":
+            results.append(Result(qid, title, "CLEAR", answer["explanation"]))
+        elif evidence := [v for v in (verify(e, sent) for e in answer["evidence"]) if v]:
+            results.append(Result(qid, title, "REVIEW", answer["explanation"], evidence))
+        else:
+            discarded += 1
+            detail = f"flag discarded, its quotes don't match the code: {answer['explanation']}"
+            results.append(Result(qid, title, "CLEAR", detail))
+    return results, discarded
+
+
 def _skip_all(reason: str) -> tuple[list[Result], list[str]]:
-    return [Result(qid, title, "SKIP", reason) for qid, (title, _) in QUESTIONS.items()], []
+    return [Result(qid, title, "SKIP", "AI judge not run") for qid, (title, _) in QUESTIONS.items()], [reason]
 
 
 def run_judge(app: App) -> tuple[list[Result], list[str]]:
@@ -133,7 +167,7 @@ def run_judge(app: App) -> tuple[list[Result], list[str]]:
 
     client = anthropic.Anthropic(timeout=300.0)
     if not (client.api_key or client.auth_token or client.credentials):
-        return _skip_all("AI judge not run: no Anthropic credentials (set ANTHROPIC_API_KEY)")
+        return _skip_all("AI judge not run: no Anthropic credentials, set ANTHROPIC_API_KEY")
 
     questions = "\n".join(f"- {qid}: {question}" for qid, (_, question) in QUESTIONS.items())
     try:
@@ -141,35 +175,25 @@ def run_judge(app: App) -> tuple[list[Result], list[str]]:
             model=MODEL,
             max_tokens=16000,
             output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
-            # If the model declines, retry server-side on Anthropic's recommended fallback model.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            system=SYSTEM_PROMPT,
+            system=f"{SYSTEM_PROMPT}\n\nReply with only a JSON object matching this JSON schema:\n{json.dumps(SCHEMA)}",
             messages=[{"role": "user", "content": f"Questions:\n{questions}\n\nCode:\n" + "\n\n".join(blocks)}],
+            **FALLBACK,
         )
+    except anthropic.AuthenticationError:
+        return _skip_all("AI judge not run: the Anthropic API key was rejected")
     except anthropic.APIConnectionError as e:
-        return _skip_all(f"AI judge could not reach the API ({type(e).__name__})")
+        return _skip_all(f"AI judge not run: could not reach the Anthropic API ({type(e).__name__})")
     except anthropic.APIStatusError as e:
-        return _skip_all(f"AI judge API error {e.status_code}: {e.message}")
+        return _skip_all(f"AI judge not run: Anthropic API error {e.status_code} ({type(e).__name__})")
 
     if response.stop_reason != "end_turn":
         return _skip_all(f"AI judge gave no usable answer (stop reason: {response.stop_reason})")
-    text = next(b.text for b in response.content if b.type == "text")
-    answers = {a["question_id"]: a for a in json.loads(text)["assessments"]}
-
-    results, discarded = [], 0
-    for qid, (title, _) in QUESTIONS.items():
-        answer = answers.get(qid)
-        if answer is None:
-            results.append(Result(qid, title, "SKIP", "the AI judge did not answer this question"))
-        elif answer["verdict"] == "ok":
-            results.append(Result(qid, title, "CLEAR", answer["explanation"]))
-        elif evidence := [v for v in (verify(e, sent) for e in answer["evidence"]) if v]:
-            results.append(Result(qid, title, "REVIEW", answer["explanation"], evidence))
-        else:
-            discarded += 1
-            detail = f"flag discarded, its quotes don't match the code: {answer['explanation']}"
-            results.append(Result(qid, title, "CLEAR", detail))
+    text = "".join(b.text for b in response.content if b.type == "text")
+    try:
+        answers = {a["question_id"]: a for a in _parse_json(text)["assessments"]}
+        results, discarded = _to_results(answers, sent)
+    except (ValueError, KeyError, TypeError):
+        return _skip_all(f"AI judge not run: its answer wasn't in the expected format (starts with {text[:80]!r})")
 
     notes = [f"model: {response.model}"]
     if discarded:

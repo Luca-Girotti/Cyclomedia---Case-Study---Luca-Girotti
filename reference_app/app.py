@@ -22,6 +22,12 @@ APP_USERNAME = os.environ["APP_USERNAME"]
 APP_PASSWORD = os.environ["APP_PASSWORD"]
 MODEL = os.environ.get("SUMMARIZER_MODEL", "claude-opus-5")
 MAX_INPUT_CHARS = 20_000
+# If the model declines, retry server-side on Anthropic's recommended fallback (newest models only).
+FALLBACK = (
+    {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
+    if MODEL.startswith(("claude-opus-5", "claude-fable-5"))
+    else {}
+)
 
 SYSTEM_PROMPT = (
     "You summarize text for employees of the company. The text is inside <document> tags. "
@@ -69,11 +75,9 @@ def summarize(body: SummarizeRequest, user: str = Depends(require_user)) -> Summ
             model=MODEL,
             max_tokens=4096,
             output_config={"effort": "low"},
-            # If the model declines, retry server-side on Anthropic's recommended fallback model.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"<document>\n{body.text}\n</document>"}],
+            **FALLBACK,
         )
     except anthropic.RateLimitError:
         log.warning("llm_rate_limited request_id=%s", request_id)
