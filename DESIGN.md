@@ -93,5 +93,6 @@ most severe issues regardless, and reviewers should spot-check a sample of CLEAR
    break it: it calls endpoints without logging in, sends prompt-injection text and sends
    oversized input. It proves problems instead of guessing, which means fewer false alarms and
    fewer human reviews.
-3. **Waivers and a review queue (the rest).** Waivers in the manifest, and a simple page listing
-   the items waiting for review, who owns each, and how long they've waited.
+3. **A review queue (the remaining days).** One page listing the flags the app's own team can't
+   approve themselves, so central reviewers can see what's waiting and what to look at first
+   (for example, confidential data before minor issues).
