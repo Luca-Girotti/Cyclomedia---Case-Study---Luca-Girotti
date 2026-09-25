@@ -71,6 +71,9 @@ plain checks take seconds. What bends is what all the teams share:
   obvious. A wrong block costs a developer a minute.
 - **Always a human:** every AI flag, any app with confidential or restricted data, any waiver, and
   the hand-off to central.
+- **Who reviews:** a small central rotation (today's single reviewer plus a few trained people), not
+  the app's own team, so nobody approves their own work. The one exception is small flags, which
+  the app's team can approve themselves with a written reason (section 3).
 
 **Why the line is there:** automate where being wrong is cheap and the answer doesn't depend on
 context. A human decides where it depends on intent (should this endpoint be public? is this data
