@@ -1,0 +1,9 @@
+# Who owns this app and how it runs. Every app ships one of these.
+# The checker reads it today; in the real platform, alert routing and the
+# deploy pipeline read the same file.
+name = "text-summarizer"
+description = "Summarizes text an employee pastes in, using Claude."
+owner_team = "demo-team"
+track = "team"                    # "team" = the builders run it, "central" = handed to the central team
+contact = "#demo-team-alerts"      # where alerts and user feedback go
+data_classification = "internal"  # public | internal | confidential | restricted
