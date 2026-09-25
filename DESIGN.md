@@ -55,17 +55,14 @@ the same logging and alerting. Handing an app off is a pull request that changes
 
 ## 3. At 50 teams
 
-Where it bends, in order:
-1. **The human review queue.** Every AI flag lands on a person, which rebuilds the original
-   bottleneck. Fix: track each AI question's false-alarm rate and reword or drop noisy ones; a
-   reviewer rotation instead of one person; let owners accept low-risk flags with a written
-   reason (a waiver in the manifest, with an expiry date).
-2. **AI judge cost and rate limits.** That's 50 apps times every push. Fix: skip the judge when a
-   plain check already fails, re-judge only changed files, and use a cheaper model for routine runs.
-3. **Changing the bar breaks everyone at once.** Fix: version the bar, and start new rules as
-   warnings for two weeks before they block.
-4. **Pattern false positives** as languages and frameworks multiply. Fix: waivers, plus
-   per-language rule packs.
+Running 50 checks at once isn't the problem: each check runs in the team's own CI job, and the
+plain checks take seconds. What bends is what all the teams share:
+
+| What bends | Why | What we'd change |
+|---|---|---|
+| **1. Reviewers** (first) | Every AI flag needs a person, so we're back to one overloaded reviewer | Drop AI questions that often raise false alarms; rotate reviewers; let teams sign off small risks themselves, with a written reason and an expiry date |
+| **2. The AI budget** | All teams share one API bill and one rate limit | Skip the AI when a plain check already failed; only re-check changed files; use a cheaper model for routine runs |
+| **3. Rule changes** | A new rule fails all 50 apps on the same morning | New rules only warn for two weeks before they block |
 
 ## 4. Automated vs. always a human
 
