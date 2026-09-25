@@ -60,7 +60,7 @@ plain checks take seconds. What bends is what all the teams share:
 
 | What bends | Why | What we'd change |
 |---|---|---|
-| **1. Reviewers** (first) | Every AI flag needs a person, so we're back to one overloaded reviewer | Drop AI questions that often raise false alarms; rotate reviewers; let teams sign off small risks themselves, with a written reason and an expiry date |
+| **1. Reviewers** (first) | Every AI flag needs a person, so we're back to one overloaded reviewer | Drop AI questions that often raise false alarms; rotate reviewers; let the app's own team approve small flags themselves, with a written reason and an expiry date |
 | **2. The AI budget** | All teams share one API bill and one rate limit | Skip the AI when a plain check already failed; only re-check changed files; use a cheaper model for routine runs |
 | **3. Rule changes** | A new rule fails all 50 apps on the same morning | New rules only warn for two weeks before they block |
 
